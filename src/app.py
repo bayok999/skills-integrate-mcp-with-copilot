@@ -77,6 +77,29 @@ activities = {
     }
 }
 
+clubs = {
+    "Robotics Club": {
+        "name": "Robotics Club",
+        "description": "Build robots and compete in local challenges.",
+        "category": "STEM",
+        "location": "Room 204",
+        "members": ["teacher@mergington.edu"],
+        "pending_requests": ["alex@mergington.edu"],
+        "created_by": "teacher@mergington.edu"
+    },
+    "Drama Club": {
+        "name": "Drama Club",
+        "description": "Create performances and learn stagecraft.",
+        "category": "Arts",
+        "location": "Auditorium",
+        "members": ["teacher@mergington.edu"],
+        "pending_requests": [],
+        "created_by": "teacher@mergington.edu"
+    }
+}
+
+ADMIN_PASSWORD = "admin123"
+
 
 @app.get("/")
 def root():
@@ -130,3 +153,110 @@ def unregister_from_activity(activity_name: str, email: str):
     # Remove student
     activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
+
+
+@app.get("/clubs")
+def get_clubs():
+    return clubs
+
+
+@app.get("/clubs/{club_name}")
+def get_club(club_name: str):
+    club = clubs.get(club_name)
+    if club is None:
+        raise HTTPException(status_code=404, detail="Club not found")
+    return club
+
+
+@app.post("/clubs")
+def create_club(club_data: dict):
+    name = str(club_data.get("name", "")).strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Club name is required")
+
+    if name in clubs:
+        raise HTTPException(status_code=400, detail="Club already exists")
+
+    club = {
+        "name": name,
+        "description": str(club_data.get("description", "")).strip(),
+        "category": str(club_data.get("category", "General")).strip() or "General",
+        "location": str(club_data.get("location", "TBD")).strip() or "TBD",
+        "members": [],
+        "pending_requests": [],
+        "created_by": "admin@mergington.edu"
+    }
+    clubs[name] = club
+    return club
+
+
+@app.post("/clubs/{club_name}/join")
+def request_join_club(club_name: str, student_email: str):
+    club = clubs.get(club_name)
+    if club is None:
+        raise HTTPException(status_code=404, detail="Club not found")
+
+    student_email = student_email.strip()
+    if not student_email:
+        raise HTTPException(status_code=400, detail="Student email is required")
+
+    if student_email in club["members"]:
+        raise HTTPException(status_code=400, detail="Student is already a member")
+
+    if student_email in club["pending_requests"]:
+        raise HTTPException(status_code=400, detail="Membership request is already pending")
+
+    club["pending_requests"].append(student_email)
+    return {
+        "status": "pending",
+        "club": club_name,
+        "student_email": student_email,
+        "pending_requests": club["pending_requests"]
+    }
+
+
+@app.post("/clubs/{club_name}/requests/approve")
+def approve_club_request(club_name: str, student_email: str, admin_password: str):
+    club = clubs.get(club_name)
+    if club is None:
+        raise HTTPException(status_code=404, detail="Club not found")
+
+    if admin_password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+
+    student_email = student_email.strip()
+    if student_email not in club["pending_requests"]:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    club["pending_requests"].remove(student_email)
+    if student_email not in club["members"]:
+        club["members"].append(student_email)
+
+    return {
+        "status": "approved",
+        "club": club_name,
+        "student_email": student_email,
+        "members": club["members"]
+    }
+
+
+@app.post("/clubs/{club_name}/requests/reject")
+def reject_club_request(club_name: str, student_email: str, admin_password: str):
+    club = clubs.get(club_name)
+    if club is None:
+        raise HTTPException(status_code=404, detail="Club not found")
+
+    if admin_password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="Invalid admin password")
+
+    student_email = student_email.strip()
+    if student_email not in club["pending_requests"]:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    club["pending_requests"].remove(student_email)
+    return {
+        "status": "rejected",
+        "club": club_name,
+        "student_email": student_email,
+        "pending_requests": club["pending_requests"]
+    }
